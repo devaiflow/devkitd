@@ -45,6 +45,15 @@ impl<S: MessageSender> Handler<S> {
                 "Received command: {:?} | message_id: {:?}",
                 msg.command, msg.message_id
             );
+
+            if msg.command == "list-plugins" {
+                let payload = self.build_list_plugins_response(&msg.message_id);
+                let _ = self.outbound_sender
+                    .send(&msg.reply_to, payload.into_bytes())
+                    .await;
+                continue;
+            }
+
             let plugin = match self.plugins.get(&msg.command) {
                 Some(p) => p,
                 None => {
@@ -119,5 +128,152 @@ impl<S: MessageSender> Handler<S> {
         }
 
         (valid_args, missing_args)
+    }
+
+    fn build_list_plugins_response(&self, message_id: &str) -> String {
+        let plugins: Vec<serde_json::Value> = self
+            .plugins
+            .values()
+            .map(|plugin| {
+                let args: Vec<serde_json::Value> = plugin
+                    .args_mapping
+                    .iter()
+                    .map(|(name, config)| {
+                        serde_json::json!({
+                            "name": name,
+                            "required": config.required
+                        })
+                    })
+                    .collect();
+
+                serde_json::json!({
+                    "name": plugin.name,
+                    "description": plugin.description,
+                    "args": args
+                })
+            })
+            .collect();
+
+        serde_json::json!({
+            "status": "ok",
+            "id": message_id,
+            "plugins": plugins
+        })
+        .to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::plugins::ArgConfig;
+
+    struct MockSender;
+
+    #[async_trait]
+    impl MessageSender for MockSender {
+        async fn send(&self, _channel: &str, _payload: Vec<u8>) -> Result<(), std::io::Error> {
+            Ok(())
+        }
+    }
+
+    fn create_test_plugin(name: &str, description: Option<&str>, args: Vec<(&str, &str, bool)>) -> PluginConfig {
+        let mut args_mapping = HashMap::new();
+        for (arg_name, flag, required) in args {
+            args_mapping.insert(
+                arg_name.to_string(),
+                ArgConfig {
+                    flag: flag.to_string(),
+                    required,
+                },
+            );
+        }
+        PluginConfig {
+            name: name.to_string(),
+            executable: format!("{}.sh", name),
+            description: description.map(String::from),
+            args_mapping,
+        }
+    }
+
+    #[test]
+    fn empty_plugins_returns_zero_count() {
+        let plugins: HashMap<String, PluginConfig> = HashMap::new();
+        let (handler, _tx) = Handler::new(plugins, MockSender, Executor::new(
+            &crate::config::ExecutionConfig { timeout_seconds: 30, max_parallel: 5 },
+            std::path::Path::new("./scripts"),
+        ));
+
+        let result = handler.build_list_plugins_response("test-msg");
+        let json: serde_json::Value = serde_json::from_str(&result).expect("valid JSON");
+
+        assert_eq!(json["status"], "ok");
+        assert_eq!(json["id"], "test-msg");
+        assert_eq!(json["plugins"].as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn single_plugin_returns_correct_structure() {
+        let mut plugins = HashMap::new();
+        let plugin = create_test_plugin(
+            "test-plugin",
+            Some("A test plugin"),
+            vec![("id", "--id", true), ("msg", "--msg", false)],
+        );
+        plugins.insert(plugin.name.clone(), plugin);
+
+        let (handler, _tx) = Handler::new(plugins, MockSender, Executor::new(
+            &crate::config::ExecutionConfig { timeout_seconds: 30, max_parallel: 5 },
+            std::path::Path::new("./scripts"),
+        ));
+
+        let result = handler.build_list_plugins_response("msg-1");
+        let json: serde_json::Value = serde_json::from_str(&result).expect("valid JSON");
+
+        assert_eq!(json["status"], "ok");
+
+        let plugin_entry = &json["plugins"][0];
+        assert_eq!(plugin_entry["name"], "test-plugin");
+        assert_eq!(plugin_entry["description"], "A test plugin");
+        assert_eq!(plugin_entry["args"].as_array().unwrap().len(), 2);
+        assert!(plugin_entry.get("executable").is_none());
+
+        let arg = &plugin_entry["args"][0];
+        assert!(arg.get("name").is_some());
+        assert!(arg.get("required").is_some());
+        assert!(arg.get("flag").is_none());
+    }
+
+    #[test]
+    fn null_description_when_missing() {
+        let mut plugins = HashMap::new();
+        let plugin = create_test_plugin("no-desc", None, vec![]);
+        plugins.insert(plugin.name.clone(), plugin);
+
+        let (handler, _tx) = Handler::new(plugins, MockSender, Executor::new(
+            &crate::config::ExecutionConfig { timeout_seconds: 30, max_parallel: 5 },
+            std::path::Path::new("./scripts"),
+        ));
+
+        let result = handler.build_list_plugins_response("msg-2");
+        let json: serde_json::Value = serde_json::from_str(&result).expect("valid JSON");
+
+        assert!(json["plugins"][0]["description"].is_null());
+    }
+
+    #[test]
+    fn special_characters_in_description_produce_valid_json() {
+        let mut plugins = HashMap::new();
+        let plugin = create_test_plugin("special", Some("Has \"quotes\" and \\backslash"), vec![]);
+        plugins.insert(plugin.name.clone(), plugin);
+
+        let (handler, _tx) = Handler::new(plugins, MockSender, Executor::new(
+            &crate::config::ExecutionConfig { timeout_seconds: 30, max_parallel: 5 },
+            std::path::Path::new("./scripts"),
+        ));
+
+        let result = handler.build_list_plugins_response("msg-3");
+        let parse_result = serde_json::from_str::<serde_json::Value>(&result);
+        assert!(parse_result.is_ok(), "Should produce valid JSON: {:?}", result);
     }
 }
