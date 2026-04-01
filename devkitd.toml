@@ -1,0 +1,7 @@
+[paths]
+plugins_dir = "./plugins"
+scripts_dir = "./scripts"
+
+[execution]
+timeout_seconds = 300
+max_parallel = 5

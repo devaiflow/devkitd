@@ -1,0 +1,15 @@
+{
+  "name": "echo-test",
+  "executable": "echo-test.sh",
+  "description": "Test script for verifying devkitd script execution, argument mapping, and output capture",
+  "args_mapping": {
+    "id": {
+      "flag": "--id",
+      "required": true
+    },
+    "message": {
+      "flag": "--message",
+      "required": false
+    }
+  }
+}
