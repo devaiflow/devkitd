@@ -11,3 +11,5 @@ async-trait = "0.1.89"
 toml = "0.8"
 directories = "5.0"
 indexmap = { version = "2", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

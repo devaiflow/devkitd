@@ -4,39 +4,47 @@ use devkitd::handler::Handler;
 use devkitd::plugins::load_plugins;
 use devkitd::transport::Broker;
 use std::io::Error;
+use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    println!("Service Starting");
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
+        .init();
+
+    tracing::info!("Service starting");
 
     let config = AppConfig::load();
-    println!("[main] Config loaded: plugins_dir={:?}, scripts_dir={:?}, timeout={}s, max_parallel={}",
-        config.paths.plugins_dir,
-        config.paths.scripts_dir,
-        config.execution.timeout_seconds,
-        config.execution.max_parallel
+    tracing::info!(
+        plugins_dir = ?config.paths.plugins_dir,
+        scripts_dir = ?config.paths.scripts_dir,
+        timeout_seconds = config.execution.timeout_seconds,
+        max_parallel = config.execution.max_parallel,
+        "Config loaded"
     );
 
     let plugins = load_plugins(&config.paths.plugins_dir);
-    println!("{:#?}", plugins);
+    tracing::debug!(plugin_count = plugins.len(), "Plugins loaded");
 
     let executor = Executor::new(&config.execution, &config.paths.scripts_dir);
 
-    let (listener, sender) = Broker::new("127.0.0.1:9000").await?;
+    let (listener, sender) = Broker::new(&config.server.bind_address).await?;
     let (handler, parser_tx) = Handler::new(plugins, sender, executor);
 
-    println!("Components initialized. Running transport and handler...");
+    tracing::info!("Components initialized, running transport and handler");
     tokio::select! {
         _ = listener.run(parser_tx) => {
-            println!("Broker stopped unexpectedly");
+            tracing::warn!("Broker stopped unexpectedly");
         }
         _ = handler.run() => {
-                println!("Handler stopped unexpectedly");
-            }
+            tracing::warn!("Handler stopped unexpectedly");
+        }
         _ = tokio::signal::ctrl_c() => {
-            println!("Received Ctrl+C, shutting down...");
+            tracing::info!("Received Ctrl+C, shutting down");
         }
     }
-    println!("Shutting down...");
+    tracing::info!("Shutting down");
     Ok(())
 }

@@ -1,3 +1,6 @@
+[server]
+bind_address = "127.0.0.1:9000"
+
 [paths]
 plugins_dir = "./plugins"
 scripts_dir = "./scripts"

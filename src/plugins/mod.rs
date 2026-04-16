@@ -22,10 +22,7 @@ pub fn load_plugins(dir_path: &std::path::Path) -> HashMap<String, PluginConfig>
     let mut plugins = HashMap::new();
 
     if !dir_path.exists() || !dir_path.is_dir() {
-        println!(
-            "Plugin directory does not exist or is not a directory: {}",
-            dir_path.display()
-        );
+        tracing::warn!(path = %dir_path.display(), "Plugin directory does not exist or is not a directory");
         return plugins;
     }
 
@@ -38,16 +35,30 @@ pub fn load_plugins(dir_path: &std::path::Path) -> HashMap<String, PluginConfig>
                 continue;
             }
             let Ok(content) = fs::read_to_string(&file_path) else {
-                println!("Error reading file: {:?}", file_path);
+                tracing::error!(path = ?file_path, "Error reading plugin file");
                 continue;
             };
             match serde_json::from_str::<PluginConfig>(&content) {
                 Ok(config) => {
-                    println!("Loaded plugin: {}", config.name);
+                    let required: Vec<&String> = config.args_mapping.iter()
+                        .filter(|(_, c)| c.required)
+                        .map(|(name, _)| name)
+                        .collect();
+                    let optional: Vec<&String> = config.args_mapping.iter()
+                        .filter(|(_, c)| !c.required)
+                        .map(|(name, _)| name)
+                        .collect();
+                    tracing::info!(
+                        name = %config.name,
+                        args = config.args_mapping.len(),
+                        ?required,
+                        ?optional,
+                        "Loaded plugin",
+                    );
                     plugins.insert(config.name.clone(), config);
                 }
                 Err(e) => {
-                    println!("Error parsing file {:?}: {}", file_path, e);
+                    tracing::error!(path = ?file_path, error = %e, "Error parsing plugin file");
                 }
             }
         }

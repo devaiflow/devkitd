@@ -1,7 +1,6 @@
-// use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use crate::transport::sender::TcpCallbackSender;
-use tokio::io::AsyncReadExt;
-use tokio::net::TcpListener; // Tu struct de salida
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::net::TcpListener;
 
 pub struct Broker {
     listener: TcpListener,
@@ -9,7 +8,7 @@ pub struct Broker {
 
 impl Broker {
     pub async fn new(config: &str) -> Result<(Self, TcpCallbackSender), std::io::Error> {
-        println!("Initializing broker with config: {}", config);
+        tracing::info!(bind_address = config, "Initializing broker");
         let listener = TcpListener::bind(config).await?;
         let sender = TcpCallbackSender::new();
         let broker = Self { listener };
@@ -17,48 +16,36 @@ impl Broker {
     }
 
     pub async fn run(&self, handler_tx: tokio::sync::mpsc::Sender<crate::handler::Message>) {
-        println!("Broker is running and waiting for connections");
+        tracing::info!("Broker is running and waiting for connections");
         loop {
             match self.listener.accept().await {
-                Ok((mut stream, socket)) => {
+                Ok((stream, socket)) => {
                     let tx_clonado = handler_tx.clone();
                     tokio::spawn(async move {
-                        println!("Accepted connection from: {}", socket);
-                        let mut buf = [0; 1024];
-                        loop {
-                            match stream.read(&mut buf).await {
-                                Ok(0) => {
-                                    println!("Connection closed by client: {}", socket);
-                                    break;
-                                }
-                                Ok(n) => {
-                                    let msg = String::from_utf8_lossy(&buf[..n]);
-                                    match serde_json::from_str::<crate::handler::Message>(&msg) {
-                                        Ok(msg) => {
-                                            if let Err(e) = tx_clonado.send(msg).await {
-                                                println!("Error handling message: {}", e);
-                                            };
-                                        }
-                                        Err(e) => {
-                                            println!(
-                                                "Error parsing message from {}: {}",
-                                                socket, e
-                                            );
-                                            break;
-                                        }
+                        tracing::debug!(peer = %socket, "Accepted connection");
+                        let reader = BufReader::new(stream);
+                        let mut lines = reader.lines();
+                        while let Ok(Some(line)) = lines.next_line().await {
+                            if line.is_empty() {
+                                continue;
+                            }
+                            match serde_json::from_str::<crate::handler::Message>(&line) {
+                                Ok(msg) => {
+                                    tracing::debug!(peer = %socket, command = %msg.command, "Received message");
+                                    if let Err(e) = tx_clonado.send(msg).await {
+                                        tracing::error!(error = %e, "Error forwarding message to handler");
                                     }
-                                    println!("Received message from {}: {}", socket, msg);
                                 }
                                 Err(e) => {
-                                    println!("Error reading from {}: {}", socket, e);
-                                    break;
+                                    tracing::warn!(peer = %socket, error = %e, "Error parsing message, continuing");
                                 }
                             }
                         }
+                        tracing::debug!(peer = %socket, "Connection closed");
                     });
                 }
                 Err(e) => {
-                    println!("Failed to accept connection: {}", e);
+                    tracing::error!(error = %e, "Failed to accept connection");
                 }
             }
         }

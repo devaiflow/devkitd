@@ -46,6 +46,7 @@ impl ExecutionResult {
     }
 }
 
+#[derive(Clone)]
 pub struct Executor {
     scripts_dir: PathBuf,
     semaphore: Arc<Semaphore>,
@@ -103,7 +104,7 @@ impl Executor {
             }
             Ok(Err(e)) => ExecutionResult::error(-1, String::new(), e.to_string()),
             Err(_) => {
-                eprintln!("[executor] Script timed out: {}", script_path.display());
+                tracing::error!(script = %script_path.display(), "Script timed out");
                 ExecutionResult::timed_out()
             }
         }

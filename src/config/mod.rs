@@ -19,11 +19,19 @@ pub struct ExecutionConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct ServerConfig {
+    #[serde(default = "default_bind_address")]
+    pub bind_address: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
     #[serde(default)]
     pub paths: PathConfig,
     #[serde(default)]
     pub execution: ExecutionConfig,
+    #[serde(default)]
+    pub server: ServerConfig,
 }
 
 fn default_plugins_dir() -> PathBuf {
@@ -32,6 +40,10 @@ fn default_plugins_dir() -> PathBuf {
 
 fn default_scripts_dir() -> PathBuf {
     PathBuf::from("./scripts")
+}
+
+fn default_bind_address() -> String {
+    "127.0.0.1:9000".to_string()
 }
 
 fn default_timeout_seconds() -> u64 {
@@ -60,11 +72,20 @@ impl Default for ExecutionConfig {
     }
 }
 
+impl Default for ServerConfig {
+    fn default() -> Self {
+        ServerConfig {
+            bind_address: default_bind_address(),
+        }
+    }
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         AppConfig {
             paths: PathConfig::default(),
             execution: ExecutionConfig::default(),
+            server: ServerConfig::default(),
         }
     }
 }
@@ -79,7 +100,7 @@ impl AppConfig {
             return config;
         }
 
-        eprintln!("[config] No config file found, using built-in defaults");
+        tracing::info!("No config file found, using built-in defaults");
         Self::default()
     }
 
@@ -90,15 +111,11 @@ impl AppConfig {
         if config_path.exists() {
             match Self::parse_file(&config_path) {
                 Ok(config) => {
-                    eprintln!("[config] Loaded from: {}", config_path.display());
+                    tracing::info!(path = %config_path.display(), "Config loaded");
                     return Some(config);
                 }
                 Err(e) => {
-                    eprintln!(
-                        "[config] Error parsing {}: {}, falling back",
-                        config_path.display(),
-                        e
-                    );
+                    tracing::warn!(path = %config_path.display(), error = %e, "Error parsing config, falling back");
                 }
             }
         }
@@ -111,15 +128,11 @@ impl AppConfig {
         if config_path.exists() {
             match Self::parse_file(&config_path) {
                 Ok(config) => {
-                    eprintln!("[config] Loaded from: {}", config_path.display());
+                    tracing::info!(path = %config_path.display(), "Config loaded");
                     return Some(config);
                 }
                 Err(e) => {
-                    eprintln!(
-                        "[config] Error parsing {}: {}, falling back",
-                        config_path.display(),
-                        e
-                    );
+                    tracing::warn!(path = %config_path.display(), error = %e, "Error parsing config, falling back");
                 }
             }
         }
