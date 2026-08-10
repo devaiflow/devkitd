@@ -1,0 +1,6 @@
+{
+  "name": "slow-test",
+  "executable": "slow-test.sh",
+  "description": "Sleeps 6s then echoes",
+  "args_mapping": {}
+}
