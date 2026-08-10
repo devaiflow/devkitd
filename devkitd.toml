@@ -1,7 +1,23 @@
+[server]
+bind_address = "127.0.0.1:9000"
+# allowed_hosts = ["localhost", "127.0.0.1", "::1"]  # default; add e.g.
+# "host.docker.internal" to reach devkitd from a container. See README.
+
 [paths]
 plugins_dir = "./plugins"
 scripts_dir = "./scripts"
 
 [execution]
-timeout_seconds = 300
+# Default per-call timeout when neither the plugin nor the caller supplies
+# one. A per-call `_timeout_seconds` (or per-plugin `timeout_seconds`) is
+# authoritative — it can extend past this default; there is no server-side
+# hard ceiling. The deadline-driven `job-cancel` is the backstop for a
+# wedged call.
+timeout_seconds = 600
 max_parallel = 5
+kill_grace_seconds = 5
+# How long a finished (done/cancelled) job stays queryable via `job-status`
+# before being purged. Purge is opportunistic on the next insert (no
+# background sweeper). Default 24h makes re-attach effectively infallible
+# short of a devkitd restart.
+job_retention_seconds = 86400
