@@ -1,6 +1,6 @@
 use devkitd::config::AppConfig;
 use devkitd::core::{CommandService, Executor, JobRegistry, PluginRegistry};
-use devkitd::transport::{require_bearer_token, DevkitdHandler};
+use devkitd::transport::{DevkitdHandler, require_bearer_token};
 use rmcp::transport::streamable_http_server::session::never::NeverSessionManager;
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
 use std::future::IntoFuture;
@@ -66,7 +66,9 @@ async fn main() -> Result<(), Error> {
 
     let registry = Arc::new(PluginRegistry::load(&config.paths.plugins_dir));
     let executor = Arc::new(Executor::new(&config.execution, &config.paths.scripts_dir));
-    let jobs = Arc::new(JobRegistry::new(Duration::from_secs(config.execution.job_retention_seconds)));
+    let jobs = Arc::new(JobRegistry::new(Duration::from_secs(
+        config.execution.job_retention_seconds,
+    )));
     let service = CommandService::new(registry, executor, jobs);
 
     // Stateless: every tools/call returns a job_id immediately (fire and
@@ -87,7 +89,10 @@ async fn main() -> Result<(), Error> {
         tracing::info!("Bearer token auth enabled");
         router = require_bearer_token(router, Arc::from(token));
     } else {
-        tracing::warn!("No {} set — MCP endpoint has no auth (only safe on loopback)", MCP_TOKEN_ENV);
+        tracing::warn!(
+            "No {} set — MCP endpoint has no auth (only safe on loopback)",
+            MCP_TOKEN_ENV
+        );
     }
 
     let listener = tokio::net::TcpListener::bind(&config.server.bind_address).await?;

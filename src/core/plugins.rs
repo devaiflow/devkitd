@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
-use std::collections::hash_map::DefaultHasher;
 use tokio::sync::RwLock;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

@@ -40,8 +40,16 @@ pub struct CommandService {
 }
 
 impl CommandService {
-    pub fn new(registry: Arc<PluginRegistry>, executor: Arc<Executor>, jobs: Arc<JobRegistry>) -> Self {
-        CommandService { registry, executor, jobs }
+    pub fn new(
+        registry: Arc<PluginRegistry>,
+        executor: Arc<Executor>,
+        jobs: Arc<JobRegistry>,
+    ) -> Self {
+        CommandService {
+            registry,
+            executor,
+            jobs,
+        }
     }
 
     pub fn registry(&self) -> &Arc<PluginRegistry> {
@@ -89,7 +97,9 @@ impl CommandService {
         tokio::spawn(async move {
             jobs.set_state(job_id, JobState::Running).await;
 
-            let outcome = executor.execute(&executable, &valid_args, timeout_override, ct).await;
+            let outcome = executor
+                .execute(&executable, &valid_args, timeout_override, ct)
+                .await;
 
             let state = match outcome {
                 ExecOutcome::Completed(result) => JobState::Done(result),
@@ -153,7 +163,12 @@ mod tests {
     fn make_service(dir: &std::path::Path) -> CommandService {
         let registry = Arc::new(PluginRegistry::load(&dir.join("plugins")));
         let executor = Arc::new(Executor::new(
-            &ExecutionConfig { timeout_seconds: 5, max_parallel: 5, kill_grace_seconds: 1, job_retention_seconds: 900 },
+            &ExecutionConfig {
+                timeout_seconds: 5,
+                max_parallel: 5,
+                kill_grace_seconds: 1,
+                job_retention_seconds: 900,
+            },
             &dir.join("scripts"),
         ));
         CommandService::new(registry, executor, Arc::new(JobRegistry::default()))
@@ -185,7 +200,13 @@ mod tests {
     async fn missing_required_arg_is_rejected() {
         let dir = std::env::temp_dir().join(format!("devkitd-svc-missing-{}", std::process::id()));
         let mut args_mapping = HashMap::new();
-        args_mapping.insert("id".to_string(), ArgConfig { flag: "--id".to_string(), required: true });
+        args_mapping.insert(
+            "id".to_string(),
+            ArgConfig {
+                flag: "--id".to_string(),
+                required: true,
+            },
+        );
         let plugin = PluginConfig {
             name: "test".to_string(),
             executable: "test.sh".to_string(),
@@ -245,7 +266,10 @@ mod tests {
             other => panic!("expected Done, got {:?}", other),
         };
         assert_eq!(result.exit_code, 0);
-        assert!(!result.stdout.contains(TIMEOUT_OVERRIDE_ARG), "_timeout_seconds must not leak into script argv");
+        assert!(
+            !result.stdout.contains(TIMEOUT_OVERRIDE_ARG),
+            "_timeout_seconds must not leak into script argv"
+        );
     }
 
     #[tokio::test]
@@ -267,12 +291,17 @@ mod tests {
         assert!(service.jobs().cancel(job_id).await);
 
         let state = wait_for_terminal(&service, job_id).await;
-        assert!(matches!(state, JobState::Cancelled), "expected Cancelled, got {:?}", state);
+        assert!(
+            matches!(state, JobState::Cancelled),
+            "expected Cancelled, got {:?}",
+            state
+        );
     }
 
     #[tokio::test]
     async fn cancel_unknown_job_id_returns_false() {
-        let dir = std::env::temp_dir().join(format!("devkitd-svc-cancel-unknown-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("devkitd-svc-cancel-unknown-{}", std::process::id()));
         std::fs::create_dir_all(&dir.join("plugins")).unwrap();
         let service = make_service(&dir);
 
