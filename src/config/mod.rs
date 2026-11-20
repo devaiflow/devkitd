@@ -64,7 +64,11 @@ fn default_bind_address() -> String {
 }
 
 fn default_allowed_hosts() -> Vec<String> {
-    vec!["localhost".to_string(), "127.0.0.1".to_string(), "::1".to_string()]
+    vec![
+        "localhost".to_string(),
+        "127.0.0.1".to_string(),
+        "::1".to_string(),
+    ]
 }
 
 fn default_timeout_seconds() -> u64 {
@@ -186,14 +190,22 @@ mod tests {
     fn default_allowed_hosts_is_loopback_only() {
         assert_eq!(
             ServerConfig::default().allowed_hosts,
-            vec!["localhost".to_string(), "127.0.0.1".to_string(), "::1".to_string()]
+            vec![
+                "localhost".to_string(),
+                "127.0.0.1".to_string(),
+                "::1".to_string()
+            ]
         );
     }
 
     #[test]
     fn allowed_hosts_omitted_from_toml_falls_back_to_default() {
-        let config: AppConfig = toml::from_str("[server]\nbind_address = \"127.0.0.1:9000\"\n").unwrap();
-        assert_eq!(config.server.allowed_hosts, ServerConfig::default().allowed_hosts);
+        let config: AppConfig =
+            toml::from_str("[server]\nbind_address = \"127.0.0.1:9000\"\n").unwrap();
+        assert_eq!(
+            config.server.allowed_hosts,
+            ServerConfig::default().allowed_hosts
+        );
     }
 
     #[test]
@@ -210,13 +222,15 @@ mod tests {
 
     #[test]
     fn default_job_retention_is_24h() {
-        assert_eq!(ExecutionConfig::default().job_retention_seconds, 24 * 60 * 60);
+        assert_eq!(
+            ExecutionConfig::default().job_retention_seconds,
+            24 * 60 * 60
+        );
     }
 
     #[test]
     fn job_retention_omitted_from_toml_falls_back_to_24h() {
-        let config: AppConfig =
-            toml::from_str("[execution]\ntimeout_seconds = 60\n").unwrap();
+        let config: AppConfig = toml::from_str("[execution]\ntimeout_seconds = 60\n").unwrap();
         assert_eq!(config.execution.job_retention_seconds, 24 * 60 * 60);
     }
 

@@ -5,13 +5,13 @@
 use devkitd::config::ExecutionConfig;
 use devkitd::core::plugins::PluginConfig;
 use devkitd::core::{CommandService, Executor, JobRegistry, PluginRegistry};
-use devkitd::transport::{require_bearer_token, DevkitdHandler};
+use devkitd::transport::{DevkitdHandler, require_bearer_token};
+use rmcp::ServiceExt;
 use rmcp::model::{CallToolRequestParams, ContentBlock};
+use rmcp::transport::StreamableHttpClientTransport;
 use rmcp::transport::streamable_http_server::session::never::NeverSessionManager;
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
-use rmcp::transport::StreamableHttpClientTransport;
-use rmcp::ServiceExt;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::net::SocketAddr;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -48,10 +48,19 @@ async fn spawn_server(dir: &Path, token: Option<&str>) -> SocketAddr {
 
 /// Same as `spawn_server` but with a custom `[execution] timeout_seconds`
 /// default — used to prove a per-call `_timeout_seconds` extends past it.
-async fn spawn_server_with_timeout(dir: &Path, token: Option<&str>, timeout_seconds: u64) -> SocketAddr {
+async fn spawn_server_with_timeout(
+    dir: &Path,
+    token: Option<&str>,
+    timeout_seconds: u64,
+) -> SocketAddr {
     let registry = Arc::new(PluginRegistry::load(&dir.join("plugins")));
     let executor = Arc::new(Executor::new(
-        &ExecutionConfig { timeout_seconds, max_parallel: 5, kill_grace_seconds: 1, job_retention_seconds: 900 },
+        &ExecutionConfig {
+            timeout_seconds,
+            max_parallel: 5,
+            kill_grace_seconds: 1,
+            job_retention_seconds: 900,
+        },
         &dir.join("scripts"),
     ));
     let jobs = Arc::new(JobRegistry::default());
@@ -115,7 +124,10 @@ async fn tools_list_call_echo_and_poll_to_done() {
             let mut m = std::collections::HashMap::new();
             m.insert(
                 "id".to_string(),
-                devkitd::core::plugins::ArgConfig { flag: "--id".to_string(), required: true },
+                devkitd::core::plugins::ArgConfig {
+                    flag: "--id".to_string(),
+                    required: true,
+                },
             );
             m
         },
@@ -170,7 +182,10 @@ async fn job_cancel_kills_the_process_group() {
     write_plugin_and_script(
         &dir,
         &plugin,
-        &format!("#!/bin/sh\n(sleep 3 && touch {}) &\nsleep 10\n", marker.display()),
+        &format!(
+            "#!/bin/sh\n(sleep 3 && touch {}) &\nsleep 10\n",
+            marker.display()
+        ),
     );
 
     let addr = spawn_server(&dir, None).await;
@@ -200,7 +215,10 @@ async fn job_cancel_kills_the_process_group() {
     assert_eq!(status["state"], "cancelled");
 
     tokio::time::sleep(Duration::from_secs(4)).await;
-    assert!(!marker.exists(), "child process should have died with its parent's process group");
+    assert!(
+        !marker.exists(),
+        "child process should have died with its parent's process group"
+    );
 }
 
 /// A missing/unknown job_id is a tool-level error, not a transport failure.
@@ -213,8 +231,12 @@ async fn job_status_unknown_id_is_a_tool_error() {
 
     let result = client
         .call_tool(
-            CallToolRequestParams::new("job-status")
-                .with_arguments(json!({ "job_id": uuid::Uuid::new_v4().to_string() }).as_object().unwrap().clone()),
+            CallToolRequestParams::new("job-status").with_arguments(
+                json!({ "job_id": uuid::Uuid::new_v4().to_string() })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
         )
         .await
         .unwrap();
@@ -253,13 +275,25 @@ async fn requests_without_the_configured_token_are_rejected() {
     }
 
     let no_token = post_mcp(addr, None).await;
-    assert!(no_token.contains("401"), "expected 401 without a token, got: {}", no_token);
+    assert!(
+        no_token.contains("401"),
+        "expected 401 without a token, got: {}",
+        no_token
+    );
 
     let wrong_token = post_mcp(addr, Some("Bearer nope")).await;
-    assert!(wrong_token.contains("401"), "expected 401 with the wrong token, got: {}", wrong_token);
+    assert!(
+        wrong_token.contains("401"),
+        "expected 401 with the wrong token, got: {}",
+        wrong_token
+    );
 
     let right_token = post_mcp(addr, Some("Bearer s3cr3t")).await;
-    assert!(!right_token.contains("401"), "expected the request to pass auth, got: {}", right_token);
+    assert!(
+        !right_token.contains("401"),
+        "expected the request to pass auth, got: {}",
+        right_token
+    );
 }
 
 /// A per-call `_timeout_seconds` is authoritative: it lets the caller
@@ -286,8 +320,12 @@ async fn per_call_timeout_extends_past_server_default() {
 
     let call_result = client
         .call_tool(
-            CallToolRequestParams::new("slow")
-                .with_arguments(json!({ "_timeout_seconds": "5" }).as_object().unwrap().clone()),
+            CallToolRequestParams::new("slow").with_arguments(
+                json!({ "_timeout_seconds": "5" })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
         )
         .await
         .unwrap();
@@ -299,5 +337,8 @@ async fn per_call_timeout_extends_past_server_default() {
 
     let status = poll_job_status(&client, &job_id).await;
     assert_eq!(status["state"], "done", "expected done, got: {}", status);
-    assert_eq!(status["exit_code"], 0, "script should have completed, not be killed at the 1s default");
+    assert_eq!(
+        status["exit_code"], 0,
+        "script should have completed, not be killed at the 1s default"
+    );
 }

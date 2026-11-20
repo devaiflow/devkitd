@@ -126,13 +126,19 @@ mod tests {
     #[tokio::test]
     async fn insert_then_get_reflects_state_transitions() {
         let jobs = JobRegistry::default();
-        let id = jobs.insert("echo".to_string(), CancellationToken::new()).await;
+        let id = jobs
+            .insert("echo".to_string(), CancellationToken::new())
+            .await;
         assert!(matches!(jobs.get(id).await, Some(JobState::Received)));
 
         jobs.set_state(id, JobState::Running).await;
         assert!(matches!(jobs.get(id).await, Some(JobState::Running)));
 
-        jobs.set_state(id, JobState::Done(ExecutionResult::success("hi".into(), "".into()))).await;
+        jobs.set_state(
+            id,
+            JobState::Done(ExecutionResult::success("hi".into(), "".into())),
+        )
+        .await;
         assert!(matches!(jobs.get(id).await, Some(JobState::Done(_))));
     }
 
@@ -158,21 +164,43 @@ mod tests {
     #[tokio::test]
     async fn retention_zero_purges_terminal_job_on_next_insert() {
         let jobs = JobRegistry::new(Duration::ZERO);
-        let id = jobs.insert("echo".to_string(), CancellationToken::new()).await;
-        jobs.set_state(id, JobState::Done(ExecutionResult::success("hi".into(), "".into()))).await;
+        let id = jobs
+            .insert("echo".to_string(), CancellationToken::new())
+            .await;
+        jobs.set_state(
+            id,
+            JobState::Done(ExecutionResult::success("hi".into(), "".into())),
+        )
+        .await;
 
-        let _other = jobs.insert("echo2".to_string(), CancellationToken::new()).await;
-        assert!(jobs.get(id).await.is_none(), "terminal job should be purged on insert with retention 0");
+        let _other = jobs
+            .insert("echo2".to_string(), CancellationToken::new())
+            .await;
+        assert!(
+            jobs.get(id).await.is_none(),
+            "terminal job should be purged on insert with retention 0"
+        );
     }
 
     /// A terminal job within the retention window is kept across inserts.
     #[tokio::test]
     async fn retention_window_keeps_terminal_job_across_inserts() {
         let jobs = JobRegistry::new(Duration::from_secs(24 * 60 * 60));
-        let id = jobs.insert("echo".to_string(), CancellationToken::new()).await;
-        jobs.set_state(id, JobState::Done(ExecutionResult::success("hi".into(), "".into()))).await;
+        let id = jobs
+            .insert("echo".to_string(), CancellationToken::new())
+            .await;
+        jobs.set_state(
+            id,
+            JobState::Done(ExecutionResult::success("hi".into(), "".into())),
+        )
+        .await;
 
-        let _other = jobs.insert("echo2".to_string(), CancellationToken::new()).await;
-        assert!(matches!(jobs.get(id).await, Some(JobState::Done(_))), "terminal job within retention window should survive");
+        let _other = jobs
+            .insert("echo2".to_string(), CancellationToken::new())
+            .await;
+        assert!(
+            matches!(jobs.get(id).await, Some(JobState::Done(_))),
+            "terminal job within retention window should survive"
+        );
     }
 }

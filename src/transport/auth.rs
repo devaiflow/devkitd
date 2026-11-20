@@ -1,8 +1,8 @@
+use axum::Router;
 use axum::extract::Request;
-use axum::http::{header, StatusCode};
+use axum::http::{StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::IntoResponse;
-use axum::Router;
 use std::sync::Arc;
 
 /// Wraps `router` with bearer-token auth. devkitd runs privileged scripts,
@@ -37,16 +37,19 @@ fn ct_eq(a: &str, b: &str) -> bool {
     if a.len() != b.len() {
         return false;
     }
-    a.bytes().zip(b.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+    a.bytes()
+        .zip(b.bytes())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+        == 0
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::Router;
     use axum::body::Body;
     use axum::http::Request as HttpRequest;
     use axum::routing::get;
-    use axum::Router;
     use tower::ServiceExt;
 
     fn app(token: &str) -> Router {
@@ -57,7 +60,12 @@ mod tests {
     #[tokio::test]
     async fn rejects_missing_header() {
         let response = app("secret")
-            .oneshot(HttpRequest::builder().uri("/protected").body(Body::empty()).unwrap())
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/protected")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);

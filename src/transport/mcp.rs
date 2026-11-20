@@ -1,14 +1,14 @@
+use crate::core::CommandService;
 use crate::core::job_registry::JobState;
 use crate::core::plugins::PluginConfig;
-use crate::core::CommandService;
 use indexmap::IndexMap;
+use rmcp::ServerHandler;
 use rmcp::model::{
     CallToolRequestParams, CallToolResult, ContentBlock, ErrorData, Implementation,
     ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerInfo, Tool,
 };
 use rmcp::service::{RequestContext, RoleServer};
-use rmcp::ServerHandler;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -34,13 +34,20 @@ impl DevkitdHandler {
             Ok(job_id) => Ok(CallToolResult::success(vec![ContentBlock::text(
                 json!({ "job_id": job_id.to_string() }).to_string(),
             )])),
-            Err(reason) => Ok(CallToolResult::error(vec![ContentBlock::text(reason.message())])),
+            Err(reason) => Ok(CallToolResult::error(vec![ContentBlock::text(
+                reason.message(),
+            )])),
         }
     }
 
-    async fn handle_job_status(&self, args: &IndexMap<String, String>) -> Result<CallToolResult, ErrorData> {
+    async fn handle_job_status(
+        &self,
+        args: &IndexMap<String, String>,
+    ) -> Result<CallToolResult, ErrorData> {
         let Some(job_id) = parse_job_id(args) else {
-            return Ok(CallToolResult::error(vec![ContentBlock::text("missing or invalid job_id")]));
+            return Ok(CallToolResult::error(vec![ContentBlock::text(
+                "missing or invalid job_id",
+            )]));
         };
         match self.service.jobs().get(job_id).await {
             Some(state) => Ok(CallToolResult::success(vec![ContentBlock::text(
@@ -53,12 +60,19 @@ impl DevkitdHandler {
         }
     }
 
-    async fn handle_job_cancel(&self, args: &IndexMap<String, String>) -> Result<CallToolResult, ErrorData> {
+    async fn handle_job_cancel(
+        &self,
+        args: &IndexMap<String, String>,
+    ) -> Result<CallToolResult, ErrorData> {
         let Some(job_id) = parse_job_id(args) else {
-            return Ok(CallToolResult::error(vec![ContentBlock::text("missing or invalid job_id")]));
+            return Ok(CallToolResult::error(vec![ContentBlock::text(
+                "missing or invalid job_id",
+            )]));
         };
         if self.service.jobs().cancel(job_id).await {
-            Ok(CallToolResult::success(vec![ContentBlock::text(json!({ "cancelled": true }).to_string())]))
+            Ok(CallToolResult::success(vec![ContentBlock::text(
+                json!({ "cancelled": true }).to_string(),
+            )]))
         } else {
             Ok(CallToolResult::error(vec![ContentBlock::text(format!(
                 "unknown job_id: {}",
@@ -102,7 +116,9 @@ impl ServerHandler for DevkitdHandler {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, ErrorData> {
-        Ok(ListToolsResult::with_all_items(self.build_tool_list().await))
+        Ok(ListToolsResult::with_all_items(
+            self.build_tool_list().await,
+        ))
     }
 
     /// Fire-and-track: every call (plugin or built-in) returns immediately.
@@ -252,7 +268,12 @@ mod tests {
     fn make_handler(dir: &std::path::Path) -> DevkitdHandler {
         let registry = Arc::new(PluginRegistry::load(&dir.join("plugins")));
         let executor = Arc::new(Executor::new(
-            &ExecutionConfig { timeout_seconds: 5, max_parallel: 5, kill_grace_seconds: 1, job_retention_seconds: 900 },
+            &ExecutionConfig {
+                timeout_seconds: 5,
+                max_parallel: 5,
+                kill_grace_seconds: 1,
+                job_retention_seconds: 900,
+            },
             &dir.join("scripts"),
         ));
         let jobs = Arc::new(JobRegistry::default());
@@ -283,7 +304,10 @@ mod tests {
         write_plugin_and_script(dir, &plugin, "#!/bin/sh\necho hi\nexit 0\n");
         handler.service.registry().reload().await;
 
-        let result = handler.handle_plugin_call("echo", &IndexMap::new()).await.unwrap();
+        let result = handler
+            .handle_plugin_call("echo", &IndexMap::new())
+            .await
+            .unwrap();
         assert_ne!(result.is_error, Some(true));
         let job_id: Value = serde_json::from_str(&result_text(&result)).unwrap();
         Uuid::parse_str(job_id["job_id"].as_str().unwrap()).unwrap()
@@ -307,7 +331,10 @@ mod tests {
         std::fs::create_dir_all(dir.join("plugins")).unwrap();
         let handler = make_handler(&dir);
 
-        let result = handler.handle_plugin_call("nope", &IndexMap::new()).await.unwrap();
+        let result = handler
+            .handle_plugin_call("nope", &IndexMap::new())
+            .await
+            .unwrap();
         assert_eq!(result.is_error, Some(true));
         assert!(result_text(&result).contains("Unknown command"));
     }
@@ -327,18 +354,23 @@ mod tests {
 
     #[tokio::test]
     async fn handle_job_status_unknown_id_is_an_error_result() {
-        let dir = std::env::temp_dir().join(format!("devkitd-mcp-status-unknown-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("devkitd-mcp-status-unknown-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("plugins")).unwrap();
         let handler = make_handler(&dir);
 
-        let result = handler.handle_job_status(&args_with(&Uuid::new_v4().to_string())).await.unwrap();
+        let result = handler
+            .handle_job_status(&args_with(&Uuid::new_v4().to_string()))
+            .await
+            .unwrap();
         assert_eq!(result.is_error, Some(true));
         assert!(result_text(&result).contains("unknown job_id"));
     }
 
     #[tokio::test]
     async fn handle_job_status_missing_arg_is_an_error_result() {
-        let dir = std::env::temp_dir().join(format!("devkitd-mcp-status-missing-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("devkitd-mcp-status-missing-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("plugins")).unwrap();
         let handler = make_handler(&dir);
 
@@ -350,13 +382,17 @@ mod tests {
     #[tokio::test]
     async fn handle_job_status_known_job_reports_done_with_output() {
         let _guard = process_test_lock().lock().await;
-        let dir = std::env::temp_dir().join(format!("devkitd-mcp-status-ok-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("devkitd-mcp-status-ok-{}", std::process::id()));
         let handler = make_handler(&dir);
 
         let job_id = start_echo_job(&handler, &dir).await;
         wait_for_terminal(&handler, job_id).await;
 
-        let result = handler.handle_job_status(&args_with(&job_id.to_string())).await.unwrap();
+        let result = handler
+            .handle_job_status(&args_with(&job_id.to_string()))
+            .await
+            .unwrap();
         assert_ne!(result.is_error, Some(true));
         let body: Value = serde_json::from_str(&result_text(&result)).unwrap();
         assert_eq!(body["state"], "done");
@@ -366,18 +402,23 @@ mod tests {
 
     #[tokio::test]
     async fn handle_job_cancel_unknown_id_is_an_error_result() {
-        let dir = std::env::temp_dir().join(format!("devkitd-mcp-cancel-unknown-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("devkitd-mcp-cancel-unknown-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("plugins")).unwrap();
         let handler = make_handler(&dir);
 
-        let result = handler.handle_job_cancel(&args_with(&Uuid::new_v4().to_string())).await.unwrap();
+        let result = handler
+            .handle_job_cancel(&args_with(&Uuid::new_v4().to_string()))
+            .await
+            .unwrap();
         assert_eq!(result.is_error, Some(true));
     }
 
     #[tokio::test]
     async fn handle_job_cancel_known_job_cancels_it() {
         let _guard = process_test_lock().lock().await;
-        let dir = std::env::temp_dir().join(format!("devkitd-mcp-cancel-ok-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("devkitd-mcp-cancel-ok-{}", std::process::id()));
         let plugin = PluginConfig {
             name: "sleep".to_string(),
             executable: "sleep.sh".to_string(),
@@ -389,16 +430,26 @@ mod tests {
         let handler = make_handler(&dir);
         handler.service.registry().reload().await;
 
-        let result = handler.handle_plugin_call("sleep", &IndexMap::new()).await.unwrap();
+        let result = handler
+            .handle_plugin_call("sleep", &IndexMap::new())
+            .await
+            .unwrap();
         let job_id: Value = serde_json::from_str(&result_text(&result)).unwrap();
         let job_id = Uuid::parse_str(job_id["job_id"].as_str().unwrap()).unwrap();
 
         tokio::time::sleep(Duration::from_millis(200)).await;
-        let cancel_result = handler.handle_job_cancel(&args_with(&job_id.to_string())).await.unwrap();
+        let cancel_result = handler
+            .handle_job_cancel(&args_with(&job_id.to_string()))
+            .await
+            .unwrap();
         assert_ne!(cancel_result.is_error, Some(true));
 
         let state = wait_for_terminal(&handler, job_id).await;
-        assert!(matches!(state, JobState::Cancelled), "expected Cancelled, got {:?}", state);
+        assert!(
+            matches!(state, JobState::Cancelled),
+            "expected Cancelled, got {:?}",
+            state
+        );
     }
 
     #[test]
@@ -418,11 +469,23 @@ mod tests {
 
     #[test]
     fn job_state_to_json_shapes_each_variant() {
-        assert_eq!(job_state_to_json(&JobState::Received), json!({ "state": "received" }));
-        assert_eq!(job_state_to_json(&JobState::Running), json!({ "state": "running" }));
-        assert_eq!(job_state_to_json(&JobState::Cancelled), json!({ "state": "cancelled" }));
+        assert_eq!(
+            job_state_to_json(&JobState::Received),
+            json!({ "state": "received" })
+        );
+        assert_eq!(
+            job_state_to_json(&JobState::Running),
+            json!({ "state": "running" })
+        );
+        assert_eq!(
+            job_state_to_json(&JobState::Cancelled),
+            json!({ "state": "cancelled" })
+        );
 
-        let done = JobState::Done(crate::core::executor::ExecutionResult::success("out".into(), "err".into()));
+        let done = JobState::Done(crate::core::executor::ExecutionResult::success(
+            "out".into(),
+            "err".into(),
+        ));
         assert_eq!(
             job_state_to_json(&done),
             json!({ "state": "done", "stdout": "out", "stderr": "err", "exit_code": 0 })
@@ -455,7 +518,11 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("devkitd-mcp-reload-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("plugins")).unwrap();
         let handler = make_handler(&dir);
-        assert_eq!(handler.build_tool_list().await.len(), 2, "only the two builtin job tools before any plugin exists");
+        assert_eq!(
+            handler.build_tool_list().await.len(),
+            2,
+            "only the two builtin job tools before any plugin exists"
+        );
 
         let plugin = PluginConfig {
             name: "late".to_string(),
@@ -468,6 +535,9 @@ mod tests {
 
         let tools = handler.build_tool_list().await;
         let names: Vec<&str> = tools.iter().map(|t| t.name.as_ref()).collect();
-        assert!(names.contains(&"late"), "newly added plugin should be picked up without restart");
+        assert!(
+            names.contains(&"late"),
+            "newly added plugin should be picked up without restart"
+        );
     }
 }

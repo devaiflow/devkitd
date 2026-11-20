@@ -1,5 +1,5 @@
 use crate::config::ExecutionConfig;
-use nix::sys::signal::{killpg, Signal};
+use nix::sys::signal::{Signal, killpg};
 use nix::unistd::Pid;
 use std::future::Future;
 use std::path::{Path, PathBuf};
@@ -19,15 +19,27 @@ pub struct ExecutionResult {
 
 impl ExecutionResult {
     pub fn success(stdout: String, stderr: String) -> Self {
-        ExecutionResult { stdout, stderr, exit_code: 0 }
+        ExecutionResult {
+            stdout,
+            stderr,
+            exit_code: 0,
+        }
     }
 
     pub fn error(exit_code: i32, stdout: String, stderr: String) -> Self {
-        ExecutionResult { stdout, stderr, exit_code }
+        ExecutionResult {
+            stdout,
+            stderr,
+            exit_code,
+        }
     }
 
     pub fn not_found(stderr: String) -> Self {
-        ExecutionResult { stdout: String::new(), stderr, exit_code: -1 }
+        ExecutionResult {
+            stdout: String::new(),
+            stderr,
+            exit_code: -1,
+        }
     }
 
     pub fn timed_out() -> Self {
@@ -248,7 +260,9 @@ mod tests {
         write_script(&dir, "ok.sh", "#!/bin/sh\necho hello\nexit 0\n");
 
         let executor = Executor::new(&test_config(5), &dir);
-        let outcome = executor.execute("ok.sh", &[], None, CancellationToken::new()).await;
+        let outcome = executor
+            .execute("ok.sh", &[], None, CancellationToken::new())
+            .await;
 
         match outcome {
             ExecOutcome::Completed(r) => {
@@ -266,7 +280,9 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
 
         let executor = Executor::new(&test_config(5), &dir);
-        let outcome = executor.execute("missing.sh", &[], None, CancellationToken::new()).await;
+        let outcome = executor
+            .execute("missing.sh", &[], None, CancellationToken::new())
+            .await;
 
         match outcome {
             ExecOutcome::Completed(r) => assert_eq!(r.exit_code, -1),
@@ -295,14 +311,19 @@ mod tests {
         );
 
         let executor = Executor::new(&test_config(1), &dir);
-        let outcome = executor.execute("spawn-child.sh", &[], None, CancellationToken::new()).await;
+        let outcome = executor
+            .execute("spawn-child.sh", &[], None, CancellationToken::new())
+            .await;
 
         assert!(matches!(outcome, ExecOutcome::TimedOut));
 
         // Give the (now-dead) group a moment past when the child *would*
         // have written the marker if it had survived the kill.
         tokio::time::sleep(Duration::from_secs(3)).await;
-        assert!(!marker.exists(), "child process should have been killed with its parent's group");
+        assert!(
+            !marker.exists(),
+            "child process should have been killed with its parent's group"
+        );
     }
 
     #[tokio::test]
@@ -325,7 +346,10 @@ mod tests {
         let outcome = executor.execute("sleep.sh", &[], None, ct).await;
 
         assert!(matches!(outcome, ExecOutcome::Cancelled));
-        assert!(start.elapsed() < Duration::from_secs(5), "should return promptly on cancellation, not wait for the 30s timeout");
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "should return promptly on cancellation, not wait for the 30s timeout"
+        );
     }
 
     /// A per-call `_timeout_seconds` override is authoritative — it can
@@ -343,12 +367,20 @@ mod tests {
         let executor = Executor::new(&test_config(1), &dir);
         let start = std::time::Instant::now();
         let outcome = executor
-            .execute("sleep.sh", &[], Some(Duration::from_secs(3)), CancellationToken::new())
+            .execute(
+                "sleep.sh",
+                &[],
+                Some(Duration::from_secs(3)),
+                CancellationToken::new(),
+            )
             .await;
 
         match outcome {
             ExecOutcome::Completed(r) => assert_eq!(r.exit_code, 0),
-            other => panic!("expected Completed, got {:?} — override must extend past default", other),
+            other => panic!(
+                "expected Completed, got {:?} — override must extend past default",
+                other
+            ),
         }
         assert!(
             start.elapsed() >= Duration::from_secs(2),
